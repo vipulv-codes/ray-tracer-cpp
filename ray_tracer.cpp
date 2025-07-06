@@ -153,6 +153,11 @@ struct Color {
         return *this;
     }
 
+    Color& operator/=(float f) {
+        r /= f; g /= f; b /= f;
+        return *this;
+    }
+
     // Print color as (r, g, b)
     friend ostream& operator<<(ostream& os, const Color& c) {
         return os << "(" << c.r << ", " << c.g << ", " << c.b << ")";
@@ -442,19 +447,40 @@ int main() {
     scene.add(make_unique<Sphere>(vec(-0.6,0,1.2), 0.3, blueMat));
     scene.add(make_unique<Plane>(vec(0,-0.5,0), vec(0,1,0), floorMat));
 
-
+    // Rendering
     ofstream img("render.ppm");
     img << "P3\n" << width << " " << height << "\n255\n";
 
+    // Anti-Aliasing (SuperSampling)
+    mt19937 rng(random_device{}());
+    uniform_real_distribution<double> uniform(0.0,1.0); // uniform [0,1)
+
+    bool AA = true;
+    int ray_per_pixel = AA ? 8 : 1;
+
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
+            Color col;
+            for (int i = 0; i < ray_per_pixel; ++i) {
+                double dx = 0.5, dy = 0.5;
+                if (AA) {
+                    // jittering
+                    dx = uniform(rng);
+                    dy = uniform(rng);
+                }
 
-            double u = ((x+0.5) - width / 2.0) / (width / 2.0);   // maps to [-1, 1]
-            double v = (height / 2.0 - (y+0.5)) / (height / 2.0); // maps to [-1, 1]
-            ray r = camera.makeRay(u, v);
-            Color col = trace(r, scene, MAX_DEPTH);
+                // double u = ((x+0.5) - width/2.0) / (width/2.0);   
+                // double v = (height/2.0 - (y+0.5)) / (height/2.0);
+
+                double u = ((x+dx) - width/2.0) / (width/2.0);   
+                double v = (height/2.0 - (y+dy)) / (height/2.0);
+
+                ray r = camera.makeRay(u,v);
+                col += trace(r, scene, MAX_DEPTH);
+            }
+            col /= ray_per_pixel;
             col.clamp();
-            col.applyGammaCorrection(1.0f, 1.0f/2.2f);
+            col.applyGammaCorrection();
 
             int R = int(col.r * 255);
             int G = int(col.g * 255);
